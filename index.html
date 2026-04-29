@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>midnight garden</title>
+    <meta
+      name="description"
+      content="A tiny offline generative web toy: paint glowing stems and flowers across a midnight garden."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="garden" aria-label="Interactive midnight garden canvas"></canvas>
+
+    <div class="hud">
+      <div>
+        <h1>midnight garden</h1>
+        <p>drag to grow / click to bloom / press <kbd>s</kbd> to save / <kbd>c</kbd> to clear</p>
+      </div>
+      <button id="saveButton" type="button">save image</button>
+    </div>
+
+    <script type="module" src="./script.js"></script>
+  </body>
+</html>
