@@ -6,11 +6,17 @@ const DPR = Math.min(window.devicePixelRatio || 1, 2);
 const blooms = [];
 const motes = [];
 const stars = [];
+const fireflies = [];
 let width = 0;
 let height = 0;
 let isPointerDown = false;
 let lastPointer = null;
 let hueBase = 180 + Math.random() * 90;
+let suppressClickUntil = 0;
+
+function randomRange(min, max) {
+  return min + Math.random() * (max - min);
+}
 
 function resize() {
   width = window.innerWidth;
@@ -19,6 +25,7 @@ function resize() {
   canvas.height = Math.floor(height * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   seedStars();
+  seedFireflies();
   paintBackground();
 }
 
@@ -35,6 +42,23 @@ function seedStars() {
   }
 }
 
+function seedFireflies() {
+  fireflies.length = 0;
+  const count = Math.max(10, Math.floor((width * height) / 90000));
+  for (let i = 0; i < count; i += 1) {
+    fireflies.push({
+      x: Math.random() * width,
+      baseY: randomRange(height * 0.22, height * 0.82),
+      size: randomRange(1.2, 2.8),
+      phase: Math.random() * Math.PI * 2,
+      speed: randomRange(0.003, 0.009),
+      drift: randomRange(8, 30),
+      hue: randomRange(58, 88),
+      alpha: randomRange(0.16, 0.42),
+    });
+  }
+}
+
 function paintBackground() {
   const sky = ctx.createLinearGradient(0, 0, 0, height);
   sky.addColorStop(0, '#07101a');
@@ -43,11 +67,18 @@ function paintBackground() {
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, width, height);
 
-  const moonGlow = ctx.createRadialGradient(width * 0.72, height * 0.18, 0, width * 0.72, height * 0.18, width * 0.25);
+  const moonX = width * 0.72;
+  const moonY = height * 0.18;
+  const moonGlow = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, width * 0.25);
   moonGlow.addColorStop(0, 'rgba(145, 197, 255, 0.16)');
   moonGlow.addColorStop(1, 'rgba(145, 197, 255, 0)');
   ctx.fillStyle = moonGlow;
   ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = 'rgba(228, 240, 255, 0.11)';
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, Math.min(width, height) * 0.055, 0, Math.PI * 2);
+  ctx.fill();
 
   for (const star of stars) {
     ctx.fillStyle = `rgba(220,235,255,${star.a})`;
@@ -56,15 +87,44 @@ function paintBackground() {
     ctx.fill();
   }
 
+  const haze = ctx.createLinearGradient(0, height * 0.45, 0, height * 0.82);
+  haze.addColorStop(0, 'rgba(90, 130, 170, 0)');
+  haze.addColorStop(1, 'rgba(18, 34, 48, 0.24)');
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, height * 0.36, width, height * 0.46);
+
+  const hillBack = ctx.createLinearGradient(0, height * 0.62, 0, height);
+  hillBack.addColorStop(0, 'rgba(14, 28, 29, 0.12)');
+  hillBack.addColorStop(1, 'rgba(8, 18, 17, 0.88)');
+  ctx.fillStyle = hillBack;
+  ctx.beginPath();
+  ctx.moveTo(0, height);
+  ctx.lineTo(0, height * 0.72);
+  ctx.quadraticCurveTo(width * 0.18, height * 0.62, width * 0.38, height * 0.72);
+  ctx.quadraticCurveTo(width * 0.6, height * 0.8, width * 0.82, height * 0.7);
+  ctx.quadraticCurveTo(width * 0.92, height * 0.66, width, height * 0.74);
+  ctx.lineTo(width, height);
+  ctx.closePath();
+  ctx.fill();
+
   const ground = ctx.createLinearGradient(0, height * 0.68, 0, height);
   ground.addColorStop(0, 'rgba(16, 30, 24, 0)');
   ground.addColorStop(1, 'rgba(8, 20, 13, 0.82)');
   ctx.fillStyle = ground;
   ctx.fillRect(0, height * 0.58, width, height * 0.42);
-}
 
-function randomRange(min, max) {
-  return min + Math.random() * (max - min);
+  const vignette = ctx.createRadialGradient(
+    width * 0.5,
+    height * 0.48,
+    height * 0.12,
+    width * 0.5,
+    height * 0.5,
+    Math.max(width, height) * 0.7,
+  );
+  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.34)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
 }
 
 function addBloom(x, y, burst = false) {
@@ -158,7 +218,7 @@ function drawBloom(bloom) {
   ctx.save();
   ctx.translate(bloom.x, bloom.y);
   ctx.rotate(bloom.tilt + (1 - bloom.life) * 0.7);
-  ctx.globalAlpha = bloom.life;
+  ctx.globalAlpha = Math.max(0, bloom.life);
   ctx.shadowBlur = bloom.glow;
   ctx.shadowColor = `hsla(${bloom.hue}, 100%, 70%, 0.35)`;
 
@@ -188,7 +248,7 @@ function drawBloom(bloom) {
 
 function drawMote(mote) {
   ctx.save();
-  ctx.globalAlpha = mote.life;
+  ctx.globalAlpha = Math.max(0, mote.life);
   ctx.fillStyle = `hsla(${mote.hue}, 100%, 75%, 0.95)`;
   ctx.shadowBlur = 12;
   ctx.shadowColor = `hsla(${mote.hue}, 100%, 75%, 0.45)`;
@@ -198,15 +258,38 @@ function drawMote(mote) {
   ctx.restore();
 }
 
-function animate() {
+function drawFirefly(firefly, time) {
+  const pulse = (Math.sin(time * firefly.speed + firefly.phase) + 1) / 2;
+  const x = firefly.x + Math.cos(time * firefly.speed * 0.35 + firefly.phase) * firefly.drift;
+  const y = firefly.baseY + Math.sin(time * firefly.speed * 0.65 + firefly.phase) * (firefly.drift * 0.45);
+
+  ctx.save();
+  ctx.globalAlpha = firefly.alpha * (0.45 + pulse * 0.9);
+  ctx.fillStyle = `hsla(${firefly.hue}, 100%, 72%, 0.95)`;
+  ctx.shadowBlur = 18 + pulse * 18;
+  ctx.shadowColor = `hsla(${firefly.hue}, 100%, 72%, 0.4)`;
+  ctx.beginPath();
+  ctx.arc(x, y, firefly.size + pulse * 0.9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function animate(time = 0) {
   paintBackground();
+
+  for (const firefly of fireflies) {
+    drawFirefly(firefly, time);
+  }
 
   for (let i = blooms.length - 1; i >= 0; i -= 1) {
     const bloom = blooms[i];
     bloom.life -= 0.0035;
+    if (bloom.life <= 0) {
+      blooms.splice(i, 1);
+      continue;
+    }
     bloom.radius += 0.012;
     drawBloom(bloom);
-    if (bloom.life <= 0) blooms.splice(i, 1);
   }
 
   for (let i = motes.length - 1; i >= 0; i -= 1) {
@@ -215,8 +298,11 @@ function animate() {
     mote.y += mote.vy;
     mote.vy += 0.003;
     mote.life -= 0.012;
+    if (mote.life <= 0) {
+      motes.splice(i, 1);
+      continue;
+    }
     drawMote(mote);
-    if (mote.life <= 0) motes.splice(i, 1);
   }
 
   requestAnimationFrame(animate);
@@ -231,6 +317,7 @@ function pointerPosition(event) {
 }
 
 canvas.addEventListener('pointerdown', (event) => {
+  suppressClickUntil = performance.now() + 250;
   isPointerDown = true;
   canvas.setPointerCapture(event.pointerId);
   lastPointer = pointerPosition(event);
@@ -251,6 +338,7 @@ canvas.addEventListener('pointerup', () => {
 });
 
 canvas.addEventListener('click', (event) => {
+  if (performance.now() < suppressClickUntil) return;
   const point = pointerPosition(event);
   addBloom(point.x, point.y, true);
 });
@@ -278,5 +366,4 @@ saveButton.addEventListener('click', saveImage);
 window.addEventListener('resize', resize);
 
 resize();
-paintBackground();
 animate();
