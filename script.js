@@ -1,21 +1,101 @@
 const canvas = document.getElementById('garden');
 const ctx = canvas.getContext('2d');
 const saveButton = document.getElementById('saveButton');
+const statusLine = document.getElementById('statusLine');
 
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 const blooms = [];
 const motes = [];
 const stars = [];
 const fireflies = [];
+const STORAGE_KEY = 'midnight-garden-ritual';
+const ritualSteps = [
+  'the garden is listening',
+  'first seed planted',
+  'the roots are learning your hands',
+  'the night keeps a small memory of this',
+  'it feels more like a place now',
+  'the garden would like you to linger',
+];
+
 let width = 0;
 let height = 0;
 let isPointerDown = false;
 let lastPointer = null;
 let hueBase = 180 + Math.random() * 90;
 let suppressClickUntil = 0;
+let sessionPlantings = 0;
+let totalPlantings = 0;
+let visits = 0;
+let nightDepth = 0;
 
 function randomRange(min, max) {
   return min + Math.random() * (max - min);
+}
+
+function loadRitualState() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null');
+    if (!saved) {
+      visits = 1;
+      persistRitualState();
+      return;
+    }
+
+    totalPlantings = Number(saved.totalPlantings) || 0;
+    visits = (Number(saved.visits) || 0) + 1;
+    persistRitualState();
+  } catch {
+    visits = 1;
+  }
+}
+
+function persistRitualState() {
+  try {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        totalPlantings,
+        visits,
+      }),
+    );
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function updateRitualState() {
+  const progress = Math.min(1, sessionPlantings / 24);
+  const memoryWeight = Math.min(0.35, totalPlantings / 160);
+  nightDepth = Math.min(1, progress * 0.85 + memoryWeight);
+
+  let ritualIndex = 0;
+  if (sessionPlantings >= 1) ritualIndex = 1;
+  if (sessionPlantings >= 4) ritualIndex = 2;
+  if (sessionPlantings >= 9) ritualIndex = 3;
+  if (sessionPlantings >= 16) ritualIndex = 4;
+  if (sessionPlantings >= 24) ritualIndex = 5;
+
+  if (sessionPlantings === 0 && totalPlantings > 0) {
+    statusLine.textContent = `the garden remembers ${totalPlantings} prior bloom${totalPlantings === 1 ? '' : 's'}`;
+    return;
+  }
+
+  let message = ritualSteps[ritualIndex];
+  if (sessionPlantings > 0) {
+    message += ` · ${sessionPlantings} planted tonight`;
+  }
+  if (visits > 1 && sessionPlantings < 4) {
+    message += ` · visit ${visits}`;
+  }
+  statusLine.textContent = message;
+}
+
+function recordPlanting() {
+  sessionPlantings += 1;
+  totalPlantings += 1;
+  updateRitualState();
+  persistRitualState();
 }
 
 function resize() {
@@ -32,19 +112,20 @@ function resize() {
 function seedStars() {
   stars.length = 0;
   const count = Math.max(80, Math.floor((width * height) / 14000));
-  for (let i = 0; i < count; i += 1) {
+  const extra = Math.floor(nightDepth * 40);
+  for (let i = 0; i < count + extra; i += 1) {
     stars.push({
       x: Math.random() * width,
       y: Math.random() * height,
       r: Math.random() * 1.6 + 0.2,
-      a: Math.random() * 0.5 + 0.15,
+      a: Math.random() * 0.5 + 0.15 + nightDepth * 0.08,
     });
   }
 }
 
 function seedFireflies() {
   fireflies.length = 0;
-  const count = Math.max(10, Math.floor((width * height) / 90000));
+  const count = Math.max(10, Math.floor((width * height) / 90000)) + Math.floor(nightDepth * 8);
   for (let i = 0; i < count; i += 1) {
     fireflies.push({
       x: Math.random() * width,
@@ -54,7 +135,7 @@ function seedFireflies() {
       speed: randomRange(0.003, 0.009),
       drift: randomRange(8, 30),
       hue: randomRange(58, 88),
-      alpha: randomRange(0.16, 0.42),
+      alpha: randomRange(0.16, 0.42) + nightDepth * 0.06,
     });
   }
 }
@@ -62,26 +143,26 @@ function seedFireflies() {
 function paintBackground() {
   const sky = ctx.createLinearGradient(0, 0, 0, height);
   sky.addColorStop(0, '#07101a');
-  sky.addColorStop(0.55, '#091625');
+  sky.addColorStop(0.55, nightDepth > 0.45 ? '#0a1828' : '#091625');
   sky.addColorStop(1, '#03050a');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, width, height);
 
   const moonX = width * 0.72;
   const moonY = height * 0.18;
-  const moonGlow = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, width * 0.25);
-  moonGlow.addColorStop(0, 'rgba(145, 197, 255, 0.16)');
+  const moonGlow = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, width * (0.25 + nightDepth * 0.04));
+  moonGlow.addColorStop(0, `rgba(145, 197, 255, ${0.16 + nightDepth * 0.06})`);
   moonGlow.addColorStop(1, 'rgba(145, 197, 255, 0)');
   ctx.fillStyle = moonGlow;
   ctx.fillRect(0, 0, width, height);
 
-  ctx.fillStyle = 'rgba(228, 240, 255, 0.11)';
+  ctx.fillStyle = `rgba(228, 240, 255, ${0.11 + nightDepth * 0.05})`;
   ctx.beginPath();
   ctx.arc(moonX, moonY, Math.min(width, height) * 0.055, 0, Math.PI * 2);
   ctx.fill();
 
   for (const star of stars) {
-    ctx.fillStyle = `rgba(220,235,255,${star.a})`;
+    ctx.fillStyle = `rgba(220,235,255,${Math.min(0.9, star.a)})`;
     ctx.beginPath();
     ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
     ctx.fill();
@@ -89,13 +170,13 @@ function paintBackground() {
 
   const haze = ctx.createLinearGradient(0, height * 0.45, 0, height * 0.82);
   haze.addColorStop(0, 'rgba(90, 130, 170, 0)');
-  haze.addColorStop(1, 'rgba(18, 34, 48, 0.24)');
+  haze.addColorStop(1, `rgba(18, 34, 48, ${0.24 + nightDepth * 0.08})`);
   ctx.fillStyle = haze;
   ctx.fillRect(0, height * 0.36, width, height * 0.46);
 
   const hillBack = ctx.createLinearGradient(0, height * 0.62, 0, height);
   hillBack.addColorStop(0, 'rgba(14, 28, 29, 0.12)');
-  hillBack.addColorStop(1, 'rgba(8, 18, 17, 0.88)');
+  hillBack.addColorStop(1, `rgba(8, 18, 17, ${0.88 + nightDepth * 0.06})`);
   ctx.fillStyle = hillBack;
   ctx.beginPath();
   ctx.moveTo(0, height);
@@ -109,7 +190,7 @@ function paintBackground() {
 
   const ground = ctx.createLinearGradient(0, height * 0.68, 0, height);
   ground.addColorStop(0, 'rgba(16, 30, 24, 0)');
-  ground.addColorStop(1, 'rgba(8, 20, 13, 0.82)');
+  ground.addColorStop(1, `rgba(8, 20, 13, ${0.82 + nightDepth * 0.08})`);
   ctx.fillStyle = ground;
   ctx.fillRect(0, height * 0.58, width, height * 0.42);
 
@@ -122,12 +203,12 @@ function paintBackground() {
     Math.max(width, height) * 0.7,
   );
   vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.34)');
+  vignette.addColorStop(1, `rgba(0, 0, 0, ${0.34 + nightDepth * 0.06})`);
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, width, height);
 }
 
-function addBloom(x, y, burst = false) {
+function addBloom(x, y, { burst = false } = {}) {
   const petals = Math.floor(randomRange(6, 10));
   const radius = burst ? randomRange(18, 42) : randomRange(10, 24);
   const hue = (hueBase + randomRange(-24, 24) + (burst ? randomRange(10, 35) : 0) + 360) % 360;
@@ -210,7 +291,7 @@ function scatterFromPointer(x, y, dx, dy) {
     const rootY = height - randomRange(10, 50);
     const rootX = px + randomRange(-40, 40);
     drawStem(rootX, rootY, px, py);
-    if (Math.random() < 0.55) addBloom(px, py, false);
+    if (Math.random() < 0.55) addBloom(px, py);
   }
 }
 
@@ -321,7 +402,10 @@ canvas.addEventListener('pointerdown', (event) => {
   isPointerDown = true;
   canvas.setPointerCapture(event.pointerId);
   lastPointer = pointerPosition(event);
-  addBloom(lastPointer.x, lastPointer.y, true);
+  addBloom(lastPointer.x, lastPointer.y, { burst: true });
+  recordPlanting();
+  seedStars();
+  seedFireflies();
 });
 
 canvas.addEventListener('pointermove', (event) => {
@@ -340,12 +424,16 @@ canvas.addEventListener('pointerup', () => {
 canvas.addEventListener('click', (event) => {
   if (performance.now() < suppressClickUntil) return;
   const point = pointerPosition(event);
-  addBloom(point.x, point.y, true);
+  addBloom(point.x, point.y, { burst: true });
+  recordPlanting();
+  seedStars();
+  seedFireflies();
 });
 
 function clearGarden() {
   blooms.length = 0;
   motes.length = 0;
+  updateRitualState();
   paintBackground();
 }
 
@@ -365,5 +453,7 @@ window.addEventListener('keydown', (event) => {
 saveButton.addEventListener('click', saveImage);
 window.addEventListener('resize', resize);
 
+loadRitualState();
+updateRitualState();
 resize();
 animate();

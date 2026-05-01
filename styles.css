@@ -83,6 +83,13 @@ p {
   max-width: 44rem;
 }
 
+.status {
+  margin-top: 0.45rem;
+  color: rgba(222, 236, 255, 0.88);
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+}
+
 kbd {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-bottom-width: 2px;
