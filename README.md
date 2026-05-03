@@ -33,6 +33,7 @@ Then open <http://localhost:4173>.
 - faint ghost flowers: earlier blooms can reappear as traces on later visits
 - `S`: save image
 - `C`: clear the current canvas
+- `X`: let the garden forget its ritual memory and ghost traces
 
 ## License
 

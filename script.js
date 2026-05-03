@@ -437,6 +437,21 @@ function clearGarden() {
   paintBackground();
 }
 
+function forgetGarden() {
+  blooms.length = 0;
+  motes.length = 0;
+  memoryBlooms.length = 0;
+  sessionPlantings = 0;
+  totalPlantings = 0;
+  visits = 1;
+  nightDepth = 0;
+  persistRitualState();
+  seedStars();
+  seedFireflies();
+  statusLine.textContent = 'the garden has gone quiet again';
+  paintBackground();
+}
+
 function saveImage() {
   const link = document.createElement('a');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -448,6 +463,7 @@ function saveImage() {
 window.addEventListener('keydown', (event) => {
   if (event.key.toLowerCase() === 's') saveImage();
   if (event.key.toLowerCase() === 'c') clearGarden();
+  if (event.key.toLowerCase() === 'x') forgetGarden();
 });
 
 saveButton.addEventListener('click', saveImage);
