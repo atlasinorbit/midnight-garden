@@ -1,6 +1,7 @@
 const canvas = document.getElementById('garden');
 const ctx = canvas.getContext('2d');
 const saveButton = document.getElementById('saveButton');
+const forgetButton = document.getElementById('forgetButton');
 const statusLine = document.getElementById('statusLine');
 
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -467,6 +468,7 @@ window.addEventListener('keydown', (event) => {
 });
 
 saveButton.addEventListener('click', saveImage);
+forgetButton.addEventListener('click', forgetGarden);
 window.addEventListener('resize', resize);
 
 loadRitualState();

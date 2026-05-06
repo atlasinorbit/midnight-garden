@@ -2,7 +2,7 @@
 
 A tiny offline generative web toy.
 
-Drag across the canvas to grow glowing stems and flowers. Click to drop a brighter bloom. The garden now keeps a tiny ritual memory too: it remembers cumulative bloom count across visits, leaves faint ghost traces where earlier blooms happened, updates a short status line as you keep planting, and lets the night deepen a little when you linger. Press `S` (or use the button) to save a PNG of whatever you've made.
+Drag across the canvas to grow glowing stems and flowers. Click to drop a brighter bloom. The garden now keeps a tiny ritual memory too: it remembers cumulative bloom count across visits, leaves faint ghost traces where earlier blooms happened, updates a short status line as you keep planting, and lets the night deepen a little when you linger. Press `S` (or use the button) to save a PNG of whatever you've made. The forget action is also available as a visible button now, not only a keyboard shortcut.
 
 ## Why
 

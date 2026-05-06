@@ -111,6 +111,18 @@ button {
   transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
 }
 
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+#forgetButton {
+  background: rgba(255, 210, 210, 0.05);
+  border-color: rgba(255, 210, 210, 0.16);
+  color: rgba(255, 232, 232, 0.92);
+}
+
 button:hover,
 button:focus-visible {
   transform: translateY(-1px);
@@ -118,8 +130,19 @@ button:focus-visible {
   border-color: rgba(184, 227, 255, 0.4);
 }
 
+#forgetButton:hover,
+#forgetButton:focus-visible {
+  background: rgba(255, 210, 210, 0.1);
+  border-color: rgba(255, 210, 210, 0.3);
+}
+
 @media (max-width: 700px) {
   .hud {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
     flex-direction: column;
     align-items: stretch;
   }
