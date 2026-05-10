@@ -9,7 +9,9 @@ const blooms = [];
 const motes = [];
 const stars = [];
 const fireflies = [];
+const memoryBlooms = [];
 const STORAGE_KEY = 'midnight-garden-ritual';
+const MAX_MEMORY_BLOOMS = 12;
 const ritualSteps = [
   'the garden is listening',
   'first seed planted',
@@ -29,6 +31,7 @@ let sessionPlantings = 0;
 let totalPlantings = 0;
 let visits = 0;
 let nightDepth = 0;
+let recentAwakeningUntil = 0;
 
 function randomRange(min, max) {
   return min + Math.random() * (max - min);
@@ -45,6 +48,20 @@ function loadRitualState() {
 
     totalPlantings = Number(saved.totalPlantings) || 0;
     visits = (Number(saved.visits) || 0) + 1;
+
+    if (Array.isArray(saved.memoryBlooms)) {
+      memoryBlooms.length = 0;
+      for (const bloom of saved.memoryBlooms.slice(-MAX_MEMORY_BLOOMS)) {
+        if (typeof bloom?.x !== 'number' || typeof bloom?.y !== 'number') continue;
+        memoryBlooms.push({
+          x: bloom.x,
+          y: bloom.y,
+          hue: typeof bloom.hue === 'number' ? bloom.hue : 220,
+          radius: typeof bloom.radius === 'number' ? bloom.radius : 18,
+        });
+      }
+    }
+
     persistRitualState();
   } catch {
     visits = 1;
@@ -58,6 +75,7 @@ function persistRitualState() {
       JSON.stringify({
         totalPlantings,
         visits,
+        memoryBlooms,
       }),
     );
   } catch {
@@ -77,6 +95,11 @@ function updateRitualState() {
   if (sessionPlantings >= 16) ritualIndex = 4;
   if (sessionPlantings >= 24) ritualIndex = 5;
 
+  if (performance.now() < recentAwakeningUntil) {
+    statusLine.textContent = 'an old bloom answered back';
+    return;
+  }
+
   if (sessionPlantings === 0 && totalPlantings > 0) {
     statusLine.textContent = `the garden remembers ${totalPlantings} prior bloom${totalPlantings === 1 ? '' : 's'}`;
     return;
@@ -86,15 +109,53 @@ function updateRitualState() {
   if (sessionPlantings > 0) {
     message += ` · ${sessionPlantings} planted tonight`;
   }
-  if (visits > 1 && sessionPlantings < 4) {
+  if (memoryBlooms.length > 0 && sessionPlantings >= 4) {
+    message += ` · ${memoryBlooms.length} traces remain`;
+  } else if (visits > 1 && sessionPlantings < 4) {
     message += ` · visit ${visits}`;
   }
   statusLine.textContent = message;
 }
 
-function recordPlanting() {
+function rememberBloom(bloom) {
+  if (!width || !height || !bloom) return;
+  memoryBlooms.push({
+    x: bloom.x / width,
+    y: bloom.y / height,
+    hue: bloom.hue,
+    radius: bloom.radius,
+  });
+  while (memoryBlooms.length > MAX_MEMORY_BLOOMS) {
+    memoryBlooms.shift();
+  }
+}
+
+function awakenNearbyMemory(x, y) {
+  if (!width || !height || memoryBlooms.length === 0) return false;
+
+  const threshold = 52;
+  let awakened = false;
+  for (const memoryBloom of memoryBlooms) {
+    const mx = memoryBloom.x * width;
+    const my = memoryBloom.y * height;
+    const distance = Math.hypot(mx - x, my - y);
+    if (distance > threshold) continue;
+
+    addBloom(mx, my, { burst: true, hueShift: 28, radiusBoost: 8 });
+    awakened = true;
+  }
+
+  if (awakened) {
+    recentAwakeningUntil = performance.now() + 1600;
+  }
+  return awakened;
+}
+
+function recordPlanting(bloom, x, y) {
   sessionPlantings += 1;
   totalPlantings += 1;
+  rememberBloom(bloom);
+  awakenNearbyMemory(x, y);
   updateRitualState();
   persistRitualState();
 }
@@ -209,12 +270,12 @@ function paintBackground() {
   ctx.fillRect(0, 0, width, height);
 }
 
-function addBloom(x, y, { burst = false } = {}) {
+function addBloom(x, y, { burst = false, hueShift = 0, radiusBoost = 0 } = {}) {
   const petals = Math.floor(randomRange(6, 10));
-  const radius = burst ? randomRange(18, 42) : randomRange(10, 24);
-  const hue = (hueBase + randomRange(-24, 24) + (burst ? randomRange(10, 35) : 0) + 360) % 360;
+  const radius = (burst ? randomRange(18, 42) : randomRange(10, 24)) + radiusBoost;
+  const hue = (hueBase + randomRange(-24, 24) + hueShift + (burst ? randomRange(10, 35) : 0) + 360) % 360;
 
-  blooms.push({
+  const bloom = {
     x,
     y,
     petals,
@@ -223,7 +284,9 @@ function addBloom(x, y, { burst = false } = {}) {
     glow: randomRange(8, 18),
     hue,
     tilt: Math.random() * Math.PI,
-  });
+  };
+
+  blooms.push(bloom);
 
   const moteCount = burst ? 18 : 10;
   for (let i = 0; i < moteCount; i += 1) {
@@ -239,6 +302,8 @@ function addBloom(x, y, { burst = false } = {}) {
       size: randomRange(1.2, 3.4),
     });
   }
+
+  return bloom;
 }
 
 function drawStem(fromX, fromY, toX, toY) {
@@ -296,13 +361,13 @@ function scatterFromPointer(x, y, dx, dy) {
   }
 }
 
-function drawBloom(bloom) {
+function drawBloomShape(x, y, bloom, alphaScale = 1) {
   ctx.save();
-  ctx.translate(bloom.x, bloom.y);
-  ctx.rotate(bloom.tilt + (1 - bloom.life) * 0.7);
-  ctx.globalAlpha = Math.max(0, bloom.life);
-  ctx.shadowBlur = bloom.glow;
-  ctx.shadowColor = `hsla(${bloom.hue}, 100%, 70%, 0.35)`;
+  ctx.translate(x, y);
+  ctx.rotate((bloom.tilt ?? 0) + (1 - (bloom.life ?? 1)) * 0.7);
+  ctx.globalAlpha = alphaScale;
+  ctx.shadowBlur = bloom.glow ?? 14;
+  ctx.shadowColor = `hsla(${bloom.hue}, 100%, 70%, 0.3)`;
 
   for (let i = 0; i < bloom.petals; i += 1) {
     const angle = (Math.PI * 2 * i) / bloom.petals;
@@ -326,6 +391,28 @@ function drawBloom(bloom) {
   ctx.arc(0, 0, Math.max(2.5, bloom.radius * 0.16), 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+}
+
+function drawMemoryBloom(memoryBloom, index) {
+  const x = memoryBloom.x * width;
+  const y = memoryBloom.y * height;
+  drawBloomShape(
+    x,
+    y,
+    {
+      petals: 7,
+      radius: memoryBloom.radius * 0.78,
+      hue: memoryBloom.hue,
+      tilt: index * 0.27,
+      glow: 8,
+      life: 1,
+    },
+    0.1 + nightDepth * 0.08 + (index / Math.max(1, memoryBlooms.length)) * 0.025,
+  );
+}
+
+function drawBloom(bloom) {
+  drawBloomShape(bloom.x, bloom.y, bloom, Math.max(0, bloom.life));
 }
 
 function drawMote(mote) {
@@ -363,6 +450,8 @@ function animate(time = 0) {
     drawFirefly(firefly, time);
   }
 
+  memoryBlooms.forEach((memoryBloom, index) => drawMemoryBloom(memoryBloom, index));
+
   for (let i = blooms.length - 1; i >= 0; i -= 1) {
     const bloom = blooms[i];
     bloom.life -= 0.0035;
@@ -387,6 +476,10 @@ function animate(time = 0) {
     drawMote(mote);
   }
 
+  if (performance.now() >= recentAwakeningUntil && statusLine.textContent === 'an old bloom answered back') {
+    updateRitualState();
+  }
+
   requestAnimationFrame(animate);
 }
 
@@ -398,15 +491,19 @@ function pointerPosition(event) {
   };
 }
 
+function plantAtPoint(point) {
+  const bloom = addBloom(point.x, point.y, { burst: true });
+  recordPlanting(bloom, point.x, point.y);
+  seedStars();
+  seedFireflies();
+}
+
 canvas.addEventListener('pointerdown', (event) => {
   suppressClickUntil = performance.now() + 250;
   isPointerDown = true;
   canvas.setPointerCapture(event.pointerId);
   lastPointer = pointerPosition(event);
-  addBloom(lastPointer.x, lastPointer.y, { burst: true });
-  recordPlanting();
-  seedStars();
-  seedFireflies();
+  plantAtPoint(lastPointer);
 });
 
 canvas.addEventListener('pointermove', (event) => {
@@ -424,11 +521,7 @@ canvas.addEventListener('pointerup', () => {
 
 canvas.addEventListener('click', (event) => {
   if (performance.now() < suppressClickUntil) return;
-  const point = pointerPosition(event);
-  addBloom(point.x, point.y, { burst: true });
-  recordPlanting();
-  seedStars();
-  seedFireflies();
+  plantAtPoint(pointerPosition(event));
 });
 
 function clearGarden() {
@@ -446,6 +539,7 @@ function forgetGarden() {
   totalPlantings = 0;
   visits = 1;
   nightDepth = 0;
+  recentAwakeningUntil = 0;
   persistRitualState();
   seedStars();
   seedFireflies();
